@@ -38,7 +38,7 @@ func New(cfg *config.ServerFTP) (*server.Client, error) {
 	}
 
 	if *cfg.TLS {
-		ftpConfig = append(ftpConfig, ftp.DialWithTLS(&tls.Config{
+		ftpConfig = append(ftpConfig, ftp.DialWithExplicitTLS(&tls.Config{
 			ServerName:         cfg.Host,
 			InsecureSkipVerify: *cfg.InsecureSkipVerify,
 		}))
