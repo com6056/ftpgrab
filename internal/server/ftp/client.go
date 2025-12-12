@@ -2,10 +2,12 @@ package ftp
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
+	"time"
 
 	"github.com/crazy-max/ftpgrab/v7/internal/config"
 	"github.com/crazy-max/ftpgrab/v7/internal/logging"
@@ -14,6 +16,50 @@ import (
 	"github.com/jlaffaye/ftp"
 	"github.com/rs/zerolog/log"
 )
+
+const (
+	minSpeed      = 1024 * 1024      // Minimum acceptable download speed (1 MB/s)
+	checkInterval = 30 * time.Second // How often to check download speed
+)
+
+var errSlowTransfer = errors.New("transfer speed too slow, reconnecting")
+
+// speedMonitor wraps an io.Reader to abort transfers that are too slow
+type speedMonitor struct {
+	reader     io.Reader
+	lastCheck  time.Time
+	lastBytes  int64
+	totalBytes int64
+	minSpeed   int64
+	interval   time.Duration
+}
+
+func (s *speedMonitor) Read(p []byte) (n int, err error) {
+	n, err = s.reader.Read(p)
+	s.totalBytes += int64(n)
+
+	now := time.Now()
+	if now.Sub(s.lastCheck) >= s.interval {
+		elapsed := now.Sub(s.lastCheck).Seconds()
+		bytesSinceCheck := s.totalBytes - s.lastBytes
+
+		if elapsed > 0 {
+			speed := float64(bytesSinceCheck) / elapsed
+			if speed < float64(s.minSpeed) && s.lastBytes > 0 {
+				log.Warn().
+					Float64("speed_bps", speed).
+					Int64("min_speed_bps", s.minSpeed).
+					Msg("Transfer speed below threshold, aborting to reconnect")
+				return n, errSlowTransfer
+			}
+		}
+
+		s.lastCheck = now
+		s.lastBytes = s.totalBytes
+	}
+
+	return n, err
+}
 
 // Client represents an active ftp object
 type Client struct {
@@ -119,7 +165,14 @@ func (c *Client) Retrieve(path string, dest io.Writer) error {
 	}
 	defer resp.Close()
 
-	_, err = io.Copy(dest, resp)
+	monitor := &speedMonitor{
+		reader:    resp,
+		lastCheck: time.Now(),
+		minSpeed:  minSpeed,
+		interval:  checkInterval,
+	}
+
+	_, err = io.Copy(dest, monitor)
 	return err
 }
 
