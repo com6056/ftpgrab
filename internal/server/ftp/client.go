@@ -18,20 +18,22 @@ import (
 )
 
 const (
-	minSpeed      = 1024 * 1024      // Minimum acceptable download speed (1 MB/s)
-	checkInterval = 30 * time.Second // How often to check download speed
+	minSpeed         = 1024 * 1024      // Minimum acceptable download speed (1 MB/s)
+	checkInterval    = 30 * time.Second // How often to check download speed
+	minSlowChecks    = 2                // Number of consecutive slow checks before aborting
 )
 
-var errSlowTransfer = errors.New("transfer speed too slow, reconnecting")
+var ErrSlowTransfer = errors.New("transfer speed too slow, reconnecting")
 
 // speedMonitor wraps an io.Reader to abort transfers that are too slow
 type speedMonitor struct {
-	reader     io.Reader
-	lastCheck  time.Time
-	lastBytes  int64
-	totalBytes int64
-	minSpeed   int64
-	interval   time.Duration
+	reader          io.Reader
+	lastCheck       time.Time
+	lastBytes       int64
+	totalBytes      int64
+	minSpeed        int64
+	interval        time.Duration
+	consecutiveSlow int
 }
 
 func (s *speedMonitor) Read(p []byte) (n int, err error) {
@@ -46,11 +48,18 @@ func (s *speedMonitor) Read(p []byte) (n int, err error) {
 		if elapsed > 0 {
 			speed := float64(bytesSinceCheck) / elapsed
 			if speed < float64(s.minSpeed) && s.lastBytes > 0 {
+				s.consecutiveSlow++
 				log.Warn().
 					Float64("speed_bps", speed).
 					Int64("min_speed_bps", s.minSpeed).
-					Msg("Transfer speed below threshold, aborting to reconnect")
-				return n, errSlowTransfer
+					Int("consecutive_slow", s.consecutiveSlow).
+					Msgf("Transfer speed below threshold (%d/%d)", s.consecutiveSlow, minSlowChecks)
+
+				if s.consecutiveSlow >= minSlowChecks {
+					return n, ErrSlowTransfer
+				}
+			} else {
+				s.consecutiveSlow = 0
 			}
 		}
 

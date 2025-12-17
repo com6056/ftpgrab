@@ -20,10 +20,11 @@ import (
 
 // Client represents an active grabber object
 type Client struct {
-	config  *config.Download
-	db      *db.Client
-	server  *server.Client
-	tempdir string
+	config       *config.Download
+	db           *db.Client
+	server       *server.Client
+	serverConfig *config.Server
+	tempdir      string
 }
 
 // New creates new grabber instance
@@ -56,11 +57,25 @@ func New(dlConfig *config.Download, dbConfig *config.Db, serverConfig *config.Se
 	}
 
 	return &Client{
-		config:  dlConfig,
-		db:      dbCli,
-		server:  serverCli,
-		tempdir: tempdir,
+		config:       dlConfig,
+		db:           dbCli,
+		server:       serverCli,
+		serverConfig: serverConfig,
+		tempdir:      tempdir,
 	}, nil
+}
+
+func (c *Client) reconnect() error {
+	var err error
+	c.server.Close()
+
+	if c.serverConfig.FTP != nil {
+		c.server, err = ftp.New(c.serverConfig.FTP)
+	} else if c.serverConfig.SFTP != nil {
+		c.server, err = sftp.New(c.serverConfig.SFTP)
+	}
+
+	return err
 }
 
 func (c *Client) Grab(files []File) journal.Journal {
@@ -140,6 +155,16 @@ func (c *Client) download(file File, retry int) *journal.Entry {
 			entry.Level = journal.EntryLevelError
 			entry.Text = fmt.Sprintf("Cannot download file: %v", err)
 		} else {
+			// If transfer was aborted due to slow speed, reconnect
+			if errors.Is(err, ftp.ErrSlowTransfer) {
+				sublogger.Warn().Msg("Reconnecting to server after slow transfer")
+				if reconnectErr := c.reconnect(); reconnectErr != nil {
+					sublogger.Error().Err(reconnectErr).Msg("Failed to reconnect")
+					entry.Level = journal.EntryLevelError
+					entry.Text = fmt.Sprintf("Failed to reconnect: %v", reconnectErr)
+					return entry
+				}
+			}
 			return c.download(file, retry)
 		}
 	} else {
