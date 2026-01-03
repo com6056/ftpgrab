@@ -2,7 +2,6 @@ package ftp
 
 import (
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,16 +13,20 @@ import (
 	"github.com/crazy-max/ftpgrab/v7/internal/server"
 	"github.com/crazy-max/ftpgrab/v7/pkg/utl"
 	"github.com/jlaffaye/ftp"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 )
 
 const (
-	minSpeed         = 1024 * 1024      // Minimum acceptable download speed (1 MB/s)
-	checkInterval    = 30 * time.Second // How often to check download speed
-	minSlowChecks    = 2                // Number of consecutive slow checks before aborting
+	minSpeed      = 1024 * 1024      // Minimum acceptable download speed (1 MB/s)
+	checkInterval = 30 * time.Second // How often to check download speed
+	minSlowChecks = 2                // Number of consecutive slow checks before aborting
 )
 
-var ErrSlowTransfer = errors.New("transfer speed too slow, reconnecting")
+var (
+	ErrSlowTransfer = errors.New("transfer speed too slow, reconnecting")
+	ErrListTimeout  = errors.New("list operation timed out")
+)
 
 // speedMonitor wraps an io.Reader to abort transfers that are too slow
 type speedMonitor struct {
@@ -137,9 +140,31 @@ func (c *Client) ReadDir(dir string) ([]os.FileInfo, error) {
 	if *c.cfg.EscapeRegexpMeta {
 		dir = regexp.QuoteMeta(dir)
 	}
-	files, err := c.ftp.List(dir)
-	if err != nil {
-		return nil, err
+
+	// Add timeout to List operation to prevent hanging
+	type listResult struct {
+		files []*ftp.Entry
+		err   error
+	}
+	resultCh := make(chan listResult, 1)
+
+	go func() {
+		f, e := c.ftp.List(dir)
+		resultCh <- listResult{files: f, err: e}
+	}()
+
+	select {
+	case result := <-resultCh:
+		files = result.files
+		if err := result.err; err != nil {
+			return nil, err
+		}
+	case <-time.After(*c.cfg.Timeout):
+		log.Warn().Dur("timeout", *c.cfg.Timeout).Msg("List operation timed out, closing connection")
+		// Close the connection since it's in a bad state
+		// The goroutine may still be blocked, but the connection will be unusable
+		c.ftp.Quit()
+		return nil, ErrListTimeout
 	}
 
 	var entries []os.FileInfo
