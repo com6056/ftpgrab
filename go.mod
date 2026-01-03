@@ -1,26 +1,26 @@
 module github.com/crazy-max/ftpgrab/v7
 
-go 1.23.0
+go 1.24.0
 
 require (
-	github.com/alecthomas/kong v1.6.0
+	github.com/alecthomas/kong v1.13.0
 	github.com/crazy-max/gonfig v0.7.1
 	github.com/docker/go-units v0.5.0
 	github.com/go-gomail/gomail v0.0.0-20160411212932-81ebce5c23df
-	github.com/go-playground/validator/v10 v10.23.0
+	github.com/go-playground/validator/v10 v10.30.1
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/ilya1st/rotatewriter v0.0.0-20171126183947-3df0c1a3ed6d
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/matcornic/hermes/v2 v2.1.0
 	github.com/nlopes/slack v0.6.0
 	github.com/pkg/errors v0.9.1
-	github.com/pkg/sftp v1.13.7
+	github.com/pkg/sftp v1.13.10
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/rs/zerolog v1.33.0
-	github.com/stretchr/testify v1.10.0
-	go.etcd.io/bbolt v1.3.11
-	golang.org/x/crypto v0.31.0
-	golang.org/x/sys v0.28.0
+	github.com/rs/zerolog v1.34.0
+	github.com/stretchr/testify v1.11.1
+	go.etcd.io/bbolt v1.4.3
+	golang.org/x/crypto v0.46.0
+	golang.org/x/sys v0.39.0
 )
 
 require (
@@ -31,7 +31,7 @@ require (
 	github.com/andybalholm/cascadia v1.0.0 // indirect
 	github.com/aokoli/goutils v1.0.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/google/uuid v1.0.0 // indirect
@@ -54,8 +54,8 @@ require (
 	github.com/ssor/bom v0.0.0-20170718123548-6386211fdfcf // indirect
 	github.com/vanng822/css v0.0.0-20190504095207-a21e860bcd04 // indirect
 	github.com/vanng822/go-premailer v0.0.0-20191214114701-be27abe028fe // indirect
-	golang.org/x/net v0.23.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
