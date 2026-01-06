@@ -26,6 +26,7 @@ const (
 var (
 	ErrSlowTransfer = errors.New("transfer speed too slow, reconnecting")
 	ErrListTimeout  = errors.New("list operation timed out")
+	ErrCloseTimeout = errors.New("quit operation timed out")
 )
 
 // speedMonitor wraps an io.Reader to abort transfers that are too slow
@@ -160,10 +161,29 @@ func (c *Client) ReadDir(dir string) ([]os.FileInfo, error) {
 			return nil, err
 		}
 	case <-time.After(*c.cfg.Timeout):
-		log.Warn().Dur("timeout", *c.cfg.Timeout).Msg("List operation timed out, closing connection")
-		// Close the connection since it's in a bad state
-		// The goroutine may still be blocked, but the connection will be unusable
-		c.ftp.Quit()
+		log.Warn().
+			Dur("timeout", *c.cfg.Timeout).
+			Msg("List operation timed out, closing connection")
+
+		// Close the connection in a goroutine to avoid blocking cleanup
+		// Use the configured timeout to give it a chance to close gracefully
+		go func() {
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				if err := c.ftp.Quit(); err != nil {
+					log.Debug().Err(err).Msg("Error during connection quit after timeout")
+				}
+			}()
+
+			// Wait for Quit() to complete, then give up after configured timeout
+			select {
+			case <-done:
+				// Successfully closed
+			case <-time.After(*c.cfg.Timeout):
+				log.Debug().Dur("quit_timeout", *c.cfg.Timeout).Msg("Quit() timed out, connection abandoned")
+			}
+		}()
 		return nil, ErrListTimeout
 	}
 
@@ -212,5 +232,17 @@ func (c *Client) Retrieve(path string, dest io.Writer) error {
 
 // Close closes ftp connection
 func (c *Client) Close() error {
-	return c.ftp.Quit()
+	// Use timeout to prevent blocking cleanup if connection is hung
+	done := make(chan error, 1)
+	go func() {
+		done <- c.ftp.Quit()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(*c.cfg.Timeout):
+		log.Warn().Dur("timeout", *c.cfg.Timeout).Msg("FTP Quit() timed out during close")
+		return ErrCloseTimeout
+	}
 }
