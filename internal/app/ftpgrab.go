@@ -14,12 +14,11 @@ import (
 
 // FtpGrab represents an active ftpgrab object
 type FtpGrab struct {
-	cfg     *config.Config
-	cron    *cron.Cron
-	notif   *notif.Client
-	grabber *grabber.Client
-	jobID   cron.EntryID
-	locker  uint32
+	cfg    *config.Config
+	cron   *cron.Cron
+	notif  *notif.Client
+	jobID  cron.EntryID
+	locker uint32
 }
 
 // New creates new ftpgrab instance
@@ -80,14 +79,15 @@ func (fg *FtpGrab) Run() {
 	}
 
 	// Grabber client
-	if fg.grabber, err = grabber.New(fg.cfg.Download, fg.cfg.Db, fg.cfg.Server); err != nil {
+	grabberClient, err := grabber.New(fg.cfg.Download, fg.cfg.Db, fg.cfg.Server)
+	if err != nil {
 		log.Error().Err(err).Msg("Cannot create grabber")
 		return
 	}
-	defer fg.grabber.Close()
+	defer grabberClient.Close()
 
 	// List files
-	files := fg.grabber.ListFiles()
+	files := grabberClient.ListFiles()
 	if len(files) == 0 {
 		log.Warn().Msg("No file found from the provided sources")
 		return
@@ -95,7 +95,7 @@ func (fg *FtpGrab) Run() {
 	log.Info().Msgf("%d file(s) found", len(files))
 
 	// Grab
-	jnl := fg.grabber.Grab(files)
+	jnl := grabberClient.Grab(files)
 	jnl.Duration = time.Since(start)
 	log.Info().
 		Str("duration", time.Since(start).Round(time.Millisecond).String()).
@@ -113,7 +113,6 @@ func (fg *FtpGrab) Run() {
 
 // Close closes ftpgrab
 func (fg *FtpGrab) Close() {
-	fg.grabber.Close()
 	if fg.cron != nil {
 		fg.cron.Stop()
 	}
