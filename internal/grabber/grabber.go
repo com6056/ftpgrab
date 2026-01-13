@@ -38,6 +38,13 @@ func New(dlConfig *config.Download, dbConfig *config.Db, serverConfig *config.Se
 		return nil, errors.Wrap(err, "Cannot open database")
 	}
 
+	// Ensure database is closed if we return with an error
+	defer func() {
+		if err != nil && dbCli != nil {
+			dbCli.Close()
+		}
+	}()
+
 	// Server client
 	if serverConfig.FTP != nil {
 		serverCli, err = ftp.New(serverConfig.FTP)
